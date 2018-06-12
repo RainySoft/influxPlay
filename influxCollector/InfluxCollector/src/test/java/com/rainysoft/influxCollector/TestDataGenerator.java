@@ -63,7 +63,7 @@ public class TestDataGenerator {
 		Instant start = Instant.now();
 		long nanostart = System.nanoTime();
 		List<Map<String, String>> l = new LinkedList<>();
-		for (int i = 0; i < 500000; i++) {
+		for (int i = 0; i < 5000000; i++) {
 			Map<String, String> a = new LinkedHashMap<>();
 			long eclipse = System.nanoTime()-nanostart; 
 			a.put("timeStamp", start.plusNanos(eclipse).toString());

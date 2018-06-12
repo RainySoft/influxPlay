@@ -1,7 +1,10 @@
 package com.rainysoft.influxCollector.repository;
 
 import java.io.BufferedReader;
+import java.io.FileReader;
 import java.io.IOException;
+import java.nio.charset.Charset;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Paths;
 import java.time.Instant;
@@ -17,7 +20,11 @@ import java.util.Map;
 import java.util.Random;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
+import java.util.stream.StreamSupport;
 
+import org.apache.commons.csv.CSVFormat;
+import org.apache.commons.csv.CSVParser;
+import org.apache.commons.csv.CSVRecord;
 import org.influxdb.InfluxDB;
 import org.influxdb.InfluxDBFactory;
 import org.influxdb.InfluxDBIOException;
@@ -27,9 +34,11 @@ import org.influxdb.dto.Pong;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import com.rainysoft.influxCollector.csv.CsvUtils;
+
 public class InfluxClient {
 
-	private final static Logger logger = LoggerFactory.getLogger(InfluxClient.class);
+	private static final Logger log = LoggerFactory.getLogger(InfluxClient.class);
 
 	private InfluxDB connect() {
 		return InfluxDBFactory.connect("http://10.1.1.4:8086", "lance", "lance");
@@ -40,14 +49,14 @@ public class InfluxClient {
 			// Ping and check for version string
 			Pong response = influxDB.ping();
 			if (response.getVersion().equalsIgnoreCase("unknown")) {
-				logger.error("Error pinging server.");
+				log.error("Error pinging server.");
 				return false;
 			} else {
-				logger.info("Database version: {}", response.getVersion());
+				log.info("Database version: {}", response.getVersion());
 				return true;
 			}
 		} catch (InfluxDBIOException idbo) {
-			logger.error("Exception while pinging database: ", idbo);
+			log.error("Exception while pinging database: ", idbo);
 			return false;
 		}
 	}
@@ -62,13 +71,25 @@ public class InfluxClient {
 		BatchPoints batchPoints = BatchPoints.database("TESTDB").retentionPolicy("mypolicy").build();
 		for (int i = 0; i < 500000; i++) {
 			Long microseconds = Instant.now().getLong(ChronoField.MICRO_OF_SECOND);
-			Point p = Point.measurement("demo").tag("tag", "tagValue").addField("seq", i)
-					.addField("testField", random.nextFloat()).addField("cpu", Math.round(random.nextFloat() * 100))
-					.build();
+			Point p = Point.measurement("demo").tag("tag", "tagValue").addField("seq", i).addField("testField", random.nextFloat())
+					.addField("cpu", Math.round(random.nextFloat() * 100)).build();
 			influx.write("TESTDB", "mypolicy", p);
 			Thread.sleep(1L);
 		}
 		// influx.write(batchPoints);
+		influx.close();
+	}
+
+	public void readCsvToInflux(String path) {
+		InfluxDB influx = connect();
+		influx.setDatabase("TESTDB");
+		influx.enableBatch(2000, 100, TimeUnit.NANOSECONDS);
+		influx.enableGzip();()
+		List<CSVRecord> records = CsvUtils.readCsv(path);
+		for (CSVRecord rec : records) {
+			Point p = CsvUtils.fromCsvRecord(rec);
+			influx.write("TESTDB", "mypolicy", p);
+		}
 		influx.close();
 	}
 
@@ -83,8 +104,7 @@ public class InfluxClient {
 		List<String> keys = Arrays.asList(reader.readLine().split(","));
 		LinkedList<String> keySet = keys.stream().collect(Collectors.toCollection(LinkedList::new));
 		while (reader.ready()) {
-			LinkedList<String> values = Arrays.asList(reader.readLine().split(",")).stream()
-					.collect(Collectors.toCollection(LinkedList::new));
+			LinkedList<String> values = Arrays.asList(reader.readLine().split(",")).stream().collect(Collectors.toCollection(LinkedList::new));
 			Map<String, Object> map = new LinkedHashMap<>();
 			for (int i = 0; i < keySet.size(); i++) {
 				if (!keySet.get(i).equals("timeStamp")) {
@@ -97,8 +117,7 @@ public class InfluxClient {
 			// covert to Shanghai time
 			Instant time = Instant.parse((String) map.get("timeStamp")).atZone(ZoneId.of("Asia/Shanghai")).toInstant();
 			Long nanoTime = TimeUnit.SECONDS.toNanos(time.getEpochSecond()) + time.getNano();
-			Point p = Point.measurement("csv3").fields(map)
-					.time(nanoTime, TimeUnit.NANOSECONDS).build();
+			Point p = Point.measurement("csv3").fields(map).time(nanoTime, TimeUnit.NANOSECONDS).build();
 			influx.write("TESTDB", "mypolicy", p);
 		}
 		influx.close();
