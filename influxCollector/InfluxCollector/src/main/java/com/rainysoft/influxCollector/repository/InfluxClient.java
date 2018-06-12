@@ -75,7 +75,7 @@ public class InfluxClient {
 	public void readTest() throws IOException {
 		InfluxDB influx = connect();
 		influx.setDatabase("TESTDB");
-		 influx.enableBatch(2000, 100, TimeUnit.NANOSECONDS);
+		influx.enableBatch(2000, 100, TimeUnit.NANOSECONDS);
 		influx.enableGzip();
 		List<Map<String, String>> results;
 		BufferedReader reader = Files.newBufferedReader(Paths.get("testdata.csv"));
